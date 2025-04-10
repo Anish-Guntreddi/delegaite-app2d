@@ -24,14 +24,6 @@ interface Character {
   isIdle: boolean;
 }
 
-interface Furniture {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  sprite: HTMLImageElement;
-}
-
 export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -44,9 +36,22 @@ export default function Home() {
     canvas.width = 1024;
     canvas.height = 768;
 
+    // Define collision areas once
+    const collisionAreas = [
+      { x: canvas.width * 0.065, y: canvas.height * 0.004, width: canvas.width * 0.91, height: canvas.height * 0.12 },
+      { x: canvas.width * 0.037, y: canvas.height * 0.37, width: canvas.width * 0.025, height: canvas.height * 0.26 },
+      { x: canvas.width * 0.002, y: canvas.height * 0.37, width: canvas.width * 0.035, height: canvas.height * 0.3 },
+      { x: canvas.width * 0.002, y: canvas.height * 0.003, width: canvas.width * 0.06, height: canvas.height * 0.24 },
+      { x: canvas.width * 0.04, y: canvas.height * 0.61, width: canvas.width * 0.605, height: canvas.height * 0.12 },
+      { x: canvas.width * 0.715, y: canvas.height * 0.61, width: canvas.width * 0.28, height: canvas.height * 0.12 },
+      { x: canvas.width * 0.975, y: canvas.height * 0.005, width: canvas.width * 0.022, height: canvas.height * 0.99 },
+      { x: canvas.width * 0, y: canvas.height * 0.61, width: canvas.width * 0.255, height: canvas.height * 0.39 },
+      { x: canvas.width * 0.235, y: canvas.height * 0.98, width: canvas.width * 0.78, height: canvas.height * 0.02 }
+    ];
+
     // Load background
     const background = new Image();
-    background.src = "/OfficeSprites/Background/Background.png";
+    background.src = "/OfficeSprites/Background/Office_Desig2.png";
 
     // Load animations
     const loadFrames = (paths: string[]) => paths.map(src => {
@@ -130,85 +135,57 @@ export default function Home() {
       };
     };
 
-    // Load furniture
-    const chair = new Image();
-    chair.src = "/OfficeSprites/Furniture/Chair.png";
-
-    const cubicle = new Image();
-    cubicle.src = "/OfficeSprites/Furniture/Cubicle.png";
-
-    const waterTank = new Image();
-    waterTank.src = "/OfficeSprites/Furniture/WaterTank.png";
-
-    const plant = new Image();
-    plant.src = "/OfficeSprites/Furniture/Plant.png";
-
-    const table = new Image();
-    table.src = "/OfficeSprites/Furniture/Table.png";
-
-    // Define office layout
-    const furniture: Furniture[] = [
-      // Cubicles
-      { x: 150, y: 200, width: 250, height: 200, sprite: cubicle },
-      { x: 400, y: 200, width: 250, height: 200, sprite: cubicle },
-      { x: 650, y: 200, width: 250, height: 200, sprite: cubicle },
-      
-      // Tables
-      { x: 200, y: 500, width: 150, height: 150, sprite: table },
-      { x: 650, y: 500, width: 150, height: 150, sprite: table },
-      
-      // Chairs
-      { x: 150, y: 450, width: 150, height: 96, sprite: chair },
-      { x: 350, y: 450, width: 150, height: 96, sprite: chair },
-      { x: 550, y: 450, width: 150, height: 96, sprite: chair },
-      { x: 750, y: 450, width: 150, height: 96, sprite: chair },
-      
-      // Plants
-      { x: 50, y: 200, width: 64, height: 64, sprite: plant },
-      { x: 50, y: 500, width: 64, height: 64, sprite: plant },
-      { x: 900, y: 200, width: 64, height: 64, sprite: plant },
-      { x: 900, y: 500, width: 64, height: 64, sprite: plant },
-      
-      // Water tank
-      { x: 900, y: 400, width: 64, height: 128, sprite: waterTank }
-    ];
-
     let frameCounter = 0;
     let currentFrame = 0;
-
-    function isPositionValid(x: number, y: number): boolean {
-      // Create a temporary character to check collision
-      const tempChar = {
-        x,
-        y,
-        width: 64,
-        height: 64
-      };
-
-      // Check collision with all furniture
-      for (const item of furniture) {
-        if (
-          tempChar.x + tempChar.width > item.x &&
-          tempChar.x < item.x + item.width &&
-          tempChar.y + tempChar.height > item.y &&
-          tempChar.y < item.y + item.height
-        ) {
-          return false;
-        }
-      }
-      return true;
-    }
 
     function getValidSpawnPosition(): { x: number, y: number } {
       if (!canvas) return { x: 0, y: 0 };
       
-      let x, y;
-      do {
-        // Try positions along the bottom of the screen
-        x = Math.random() * (canvas.width - 64);
-        y = canvas.height - 100; // Spawn near the bottom
-      } while (!isPositionValid(x, y));
-      return { x, y };
+      const characterWidth = 64;
+      const characterHeight = 100;
+
+      // Function to check if a position is valid (not in collision areas)
+      const isValidPosition = (x: number, y: number) => {
+        for (const area of collisionAreas) {
+          if (
+            x + characterWidth > area.x &&
+            x < area.x + area.width &&
+            y + characterHeight > area.y &&
+            y < area.y + area.height
+          ) {
+            return false;
+          }
+        }
+        return true;
+      };
+
+      // Try to find a valid spawn position
+      let attempts = 0;
+      const maxAttempts = 100;
+      
+      while (attempts < maxAttempts) {
+        // Define safe spawn regions (areas where characters are likely to spawn)
+        const spawnRegions = [
+          { x: canvas.width * 0.1, y: canvas.height * 0.2, width: canvas.width * 0.8, height: canvas.height * 0.3 }, // Upper middle
+          { x: canvas.width * 0.1, y: canvas.height * 0.7, width: canvas.width * 0.8, height: canvas.height * 0.2 }  // Lower middle
+        ];
+
+        // Randomly select a spawn region
+        const region = spawnRegions[Math.floor(Math.random() * spawnRegions.length)];
+        
+        // Generate random position within the selected region
+        const x = region.x + Math.random() * (region.width - characterWidth);
+        const y = region.y + Math.random() * (region.height - characterHeight);
+
+        if (isValidPosition(x, y)) {
+          return { x, y };
+        }
+        
+        attempts++;
+      }
+
+      // If no valid position found after max attempts, return a default position
+      return { x: canvas.width * 0.5, y: canvas.height * 0.5 };
     }
 
     // Initialize characters with their animations
@@ -251,17 +228,6 @@ export default function Home() {
       }
     ];
 
-    function checkCollision(character: Character, furniture: Furniture): boolean {
-      // Add a small buffer around the character for better collision detection
-      const buffer = 10;
-      return (
-        character.x + 64 - buffer > furniture.x &&
-        character.x + buffer < furniture.x + furniture.width &&
-        character.y + 64 - buffer > furniture.y &&
-        character.y + buffer < furniture.y + furniture.height
-      );
-    }
-
     function updateCharacter(character: Character) {
       if (!canvas) return;
       
@@ -289,55 +255,65 @@ export default function Home() {
         return;
       }
 
-      // Store current position
-      const oldX = character.x;
-      const oldY = character.y;
+      const characterWidth = 64;
+      const characterHeight = 100;
 
-      // Update position
-      character.x += character.dx;
-      character.y += character.dy;
-
-      // Check for collisions with furniture
-      let hasCollision = false;
-      for (const item of furniture) {
-        if (checkCollision(character, item)) {
-          hasCollision = true;
-          break;
+      // Check for collisions with collision areas
+      const checkCollision = (x: number, y: number) => {
+        for (const area of collisionAreas) {
+          if (
+            x + characterWidth > area.x &&
+            x < area.x + area.width &&
+            y + characterHeight > area.y &&
+            y < area.y + area.height
+          ) {
+            return true;
+          }
         }
+        return false;
+      };
+
+      // Try to move character
+      const newX = character.x + character.dx;
+      const newY = character.y + character.dy;
+
+      // Check if the new position would cause a collision
+      if (checkCollision(newX, character.y)) {
+        // Reverse horizontal direction and update animation
+        character.dx = -character.dx;
+        character.direction = character.dx > 0 ? "right" : "left";
+      } else {
+        character.x = newX;
       }
 
-      // If collision detected, revert position and change direction
-      if (hasCollision) {
-        character.x = oldX;
-        character.y = oldY;
-        // Choose a new random direction
-        const directions = ["up", "down", "left", "right"] as const;
-        const newDirection = directions[Math.floor(Math.random() * directions.length)];
-        character.direction = newDirection;
-        character.dx = newDirection === "left" ? -1 : newDirection === "right" ? 1 : 0;
-        character.dy = newDirection === "up" ? -1 : newDirection === "down" ? 1 : 0;
+      if (checkCollision(character.x, newY)) {
+        // Reverse vertical direction and update animation
+        character.dy = -character.dy;
+        character.direction = character.dy > 0 ? "down" : "up";
+      } else {
+        character.y = newY;
       }
 
-      // Keep within bounds
+      // Keep within canvas bounds
       if (character.x < 0) {
         character.x = 0;
         character.dx = -character.dx;
-        character.direction = character.dx > 0 ? "right" : "left";
+        character.direction = "right";
       }
-      if (character.x > canvas.width - 64) {
-        character.x = canvas.width - 64;
+      if (character.x > canvas.width - characterWidth) {
+        character.x = canvas.width - characterWidth;
         character.dx = -character.dx;
-        character.direction = character.dx > 0 ? "right" : "left";
+        character.direction = "left";
       }
       if (character.y < 0) {
         character.y = 0;
         character.dy = -character.dy;
-        character.direction = character.dy > 0 ? "down" : "up";
+        character.direction = "down";
       }
-      if (character.y > canvas.height - 64) {
-        character.y = canvas.height - 64;
+      if (character.y > canvas.height - characterHeight) {
+        character.y = canvas.height - characterHeight;
         character.dy = -character.dy;
-        character.direction = character.dy > 0 ? "down" : "up";
+        character.direction = "up";
       }
     }
 
@@ -346,9 +322,11 @@ export default function Home() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(background, 0, 0, canvas.width, canvas.height);
 
-      // Draw furniture
-      furniture.forEach(item => {
-        ctx.drawImage(item.sprite, item.x, item.y, item.width, item.height);
+      // Draw and outline collision areas
+      ctx.strokeStyle = 'red';
+      ctx.lineWidth = 4;
+      collisionAreas.forEach(area => {
+        ctx.strokeRect(area.x, area.y, area.width, area.height);
       });
 
       // Update and draw each character
@@ -363,7 +341,7 @@ export default function Home() {
           sprite = character.runFrames[character.direction][currentFrame % character.runFrames[character.direction].length];
         }
 
-        ctx.drawImage(sprite, character.x, character.y, 64, 64);
+        ctx.drawImage(sprite, character.x, character.y, 64, 100);
       });
 
       frameCounter++;
@@ -373,8 +351,9 @@ export default function Home() {
     }
 
     // Wait for all images to load
-    const images = [background, chair, cubicle, waterTank, plant, table];
+    const images = [background];
     let loadedImages = 0;
+
     images.forEach(img => {
       img.onload = () => {
         loadedImages++;
@@ -386,8 +365,8 @@ export default function Home() {
   }, []);
 
   return (
-    <main className="w-screen h-screen flex items-center justify-center bg-black">
-      <canvas ref={canvasRef} />
+    <main className="flex min-h-screen flex-col items-center justify-between p-24">
+      <canvas ref={canvasRef} className="border border-gray-300" />
     </main>
   );
 }
