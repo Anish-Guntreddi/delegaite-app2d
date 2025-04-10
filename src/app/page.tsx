@@ -19,9 +19,17 @@ interface Character {
     left: HTMLImageElement[];
     right: HTMLImageElement[];
   };
+  sittingFrames: {
+    up: HTMLImageElement[];
+    down: HTMLImageElement[];
+  };
   direction: "down" | "up" | "left" | "right";
   idleTimer: number;
   isIdle: boolean;
+  isSitting: boolean;
+  sittingTimer: number;
+  sittingDesk: "up" | "down" | null;
+  sittingDeskIndex: number | null;
 }
 
 export default function Home() {
@@ -54,16 +62,23 @@ export default function Home() {
     background.src = "/OfficeSprites/Background/Office_Desig2.png";
 
     // Load desk
-    const desk = new Image();
-    desk.src = "/OfficeSprites/Furniture/desk.png";
+    const Downdesk = new Image();
+    Downdesk.src = "/OfficeSprites/Furniture/DeskDown.png";
+
+    const Updesk = new Image();
+    Updesk.src = "/OfficeSprites/Furniture/DeskUp.png";
 
     // Define desk positions and sizes
-    const desks = [
-      { x: canvas.width * 0.4, y: canvas.height * 0.3, width: canvas.width * 0.2, height: canvas.height * 0.2 },
-      { x: canvas.width * 0.2, y: canvas.height * 0.4, width: canvas.width * 0.2, height: canvas.height * 0.2 },
-      { x: canvas.width * 0.6, y: canvas.height * 0.4, width: canvas.width * 0.2, height: canvas.height * 0.2 },
-      { x: canvas.width * 0.3, y: canvas.height * 0.5, width: canvas.width * 0.2, height: canvas.height * 0.2 },
-      { x: canvas.width * 0.5, y: canvas.height * 0.5, width: canvas.width * 0.2, height: canvas.height * 0.2 }
+    const downDesk = [
+      { x: canvas.width * 0.15, y: canvas.height * 0.15, width: canvas.width * 0.2, height: canvas.height * 0.2 },
+      { x: canvas.width * 0.45, y: canvas.height * 0.15, width: canvas.width * 0.2, height: canvas.height * 0.2 },
+      { x: canvas.width * 0.75, y: canvas.height * 0.15, width: canvas.width * 0.2, height: canvas.height * 0.2 },
+    ];
+
+    const upDesk = [
+      { x: canvas.width * 0.135 , y: canvas.height * 0.35, width: canvas.width * 0.23, height: canvas.height * 0.2 },
+      { x: canvas.width * 0.45, y: canvas.height * 0.35, width: canvas.width * 0.22, height: canvas.height * 0.2 },
+      { x: canvas.width * 0.75, y: canvas.height * 0.35, width: canvas.width * 0.22, height: canvas.height * 0.2 },
     ];
 
     // Load animations
@@ -144,6 +159,15 @@ export default function Home() {
             `${basePath}/run_frames/rightRun/rightRun5.png`,
             `${basePath}/run_frames/rightRun/rightRun6.png`,
           ])
+        },
+        sittingFrames: {
+          up: loadFrames([
+            `${basePath}/SittingChairUp/Character${characterNum}SittingChairUp.png`
+          ]),
+          down: loadFrames([
+            `${basePath}/SittingChairDown/Character${characterNum}SittingChairDownFrame1.png`,
+            `${basePath}/SittingChairDown/Character${characterNum}SittingChairDownFrame2.png`
+          ])
         }
       };
     };
@@ -210,7 +234,11 @@ export default function Home() {
         ...loadCharacterAnimations(1),
         direction: "right",
         idleTimer: 0,
-        isIdle: false
+        isIdle: false,
+        isSitting: false,
+        sittingTimer: 0,
+        sittingDesk: null,
+        sittingDeskIndex: null
       },
       {
         ...getValidSpawnPosition(),
@@ -219,7 +247,11 @@ export default function Home() {
         ...loadCharacterAnimations(2),
         direction: "left",
         idleTimer: 0,
-        isIdle: false
+        isIdle: false,
+        isSitting: false,
+        sittingTimer: 0,
+        sittingDesk: null,
+        sittingDeskIndex: null
       },
       {
         ...getValidSpawnPosition(),
@@ -228,7 +260,11 @@ export default function Home() {
         ...loadCharacterAnimations(3),
         direction: "right",
         idleTimer: 0,
-        isIdle: false
+        isIdle: false,
+        isSitting: false,
+        sittingTimer: 0,
+        sittingDesk: null,
+        sittingDeskIndex: null
       },
       {
         ...getValidSpawnPosition(),
@@ -237,13 +273,70 @@ export default function Home() {
         ...loadCharacterAnimations(4),
         direction: "left",
         idleTimer: 0,
-        isIdle: false
+        isIdle: false,
+        isSitting: false,
+        sittingTimer: 0,
+        sittingDesk: null,
+        sittingDeskIndex: null
       }
     ];
 
     function updateCharacter(character: Character) {
       if (!canvas) return;
       
+      // Handle sitting state
+      if (character.isSitting) {
+        character.sittingTimer--;
+        if (character.sittingTimer <= 0) {
+          character.isSitting = false;
+          character.sittingDesk = null;
+          character.sittingDeskIndex = null;
+          // Randomly choose a new direction
+          const directions = ["up", "down", "left", "right"] as const;
+          const newDirection = directions[Math.floor(Math.random() * directions.length)];
+          character.direction = newDirection;
+          character.dx = newDirection === "left" ? -1 : newDirection === "right" ? 1 : 0;
+          character.dy = newDirection === "up" ? -1 : newDirection === "down" ? 1 : 0;
+        }
+        return;
+      }
+
+      // Check if character is near a desk
+      const characterWidth = 64;
+      const characterHeight = 100;
+      const deskProximity = 50; // Distance threshold to trigger sitting
+
+      const checkDeskProximity = (desk: { x: number, y: number, width: number, height: number }, type: "up" | "down") => {
+        const deskCenterX = desk.x + desk.width / 2;
+        const deskCenterY = desk.y + desk.height / 2;
+        const characterCenterX = character.x + characterWidth / 2;
+        const characterCenterY = character.y + characterHeight / 2;
+        
+        const distance = Math.sqrt(
+          Math.pow(deskCenterX - characterCenterX, 2) + 
+          Math.pow(deskCenterY - characterCenterY, 2)
+        );
+
+        if (distance < deskProximity) {
+          character.isSitting = true;
+          character.sittingTimer = Math.floor(Math.random() * 100) + 50; // Sit for 50-150 frames
+          character.sittingDesk = type;
+          character.sittingDeskIndex = downDesk.findIndex(d => d.x === desk.x && d.y === desk.y);
+          character.dx = 0;
+          character.dy = 0;
+          return true;
+        }
+        return false;
+      };
+
+      // Check proximity to all desks
+      for (const desk of downDesk) {
+        if (checkDeskProximity(desk, "down")) return;
+      }
+      for (const desk of upDesk) {
+        if (checkDeskProximity(desk, "up")) return;
+      }
+
       // Handle idle state
       if (character.isIdle) {
         character.idleTimer--;
@@ -267,9 +360,6 @@ export default function Home() {
         character.dy = 0;
         return;
       }
-
-      const characterWidth = 64;
-      const characterHeight = 100;
 
       // Check for collisions with collision areas
       const checkCollision = (x: number, y: number) => {
@@ -335,17 +425,26 @@ export default function Home() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(background, 0, 0, canvas.width, canvas.height);
 
-      // Draw all desks
-      desks.forEach(deskPos => {
-        ctx.drawImage(desk, deskPos.x, deskPos.y, deskPos.width, deskPos.height);
+      // Draw all desks that aren't being sat at
+      downDesk.forEach((deskPos, index) => {
+        const isDeskOccupied = characters.some(char => 
+          char.isSitting && char.sittingDesk === "down" && char.sittingDeskIndex === index
+        );
+        if (!isDeskOccupied) {
+          ctx.drawImage(Downdesk, deskPos.x, deskPos.y, deskPos.width, deskPos.height);
+        }
       });
 
-      // Draw and outline collision areas
-      ctx.strokeStyle = 'red';
-      ctx.lineWidth = 4;
-      collisionAreas.forEach(area => {
-        ctx.strokeRect(area.x, area.y, area.width, area.height);
+      upDesk.forEach((deskPos, index) => {
+        const isDeskOccupied = characters.some(char => 
+          char.isSitting && char.sittingDesk === "up" && char.sittingDeskIndex === index
+        );
+        if (!isDeskOccupied) {
+          ctx.drawImage(Updesk, deskPos.x, deskPos.y, deskPos.width, deskPos.height);
+        }
       });
+
+  
 
       // Update and draw each character
       characters.forEach(character => {
@@ -353,13 +452,43 @@ export default function Home() {
 
         // Choose frame based on direction and movement
         let sprite: HTMLImageElement;
-        if (character.isIdle || (character.dx === 0 && character.dy === 0)) {
+        let width = 64;
+        let height = 100;
+        let x = character.x;
+        let y = character.y;
+
+        if (character.isSitting && character.sittingDesk !== null && character.sittingDeskIndex !== null) {
+          // Use sitting animation based on desk type
+          const frames = character.sittingFrames[character.sittingDesk];
+          sprite = frames[currentFrame % frames.length];
+          
+          // Get the correct desk array based on type
+          const deskArray = character.sittingDesk === "up" ? upDesk : downDesk;
+          const desk = deskArray[character.sittingDeskIndex];
+          
+          if (desk) {
+            // Adjust dimensions for sitting animations
+            if (character.sittingDesk === "up") {
+              width = 120;
+              height = 150;
+            } else {
+              width = 100;
+              height = 120;
+            }
+            
+            // Center the sitting character on the desk
+            const deskCenterX = desk.x + desk.width / 2;
+            const deskCenterY = desk.y + desk.height / 2;
+            x = deskCenterX - width / 2;
+            y = deskCenterY - height / 2;
+          }
+        } else if (character.isIdle || (character.dx === 0 && character.dy === 0)) {
           sprite = character.idleFrames[character.direction][currentFrame % character.idleFrames[character.direction].length];
         } else {
           sprite = character.runFrames[character.direction][currentFrame % character.runFrames[character.direction].length];
         }
 
-        ctx.drawImage(sprite, character.x, character.y, 64, 100);
+        ctx.drawImage(sprite, x, y, width, height);
       });
 
       frameCounter++;
@@ -369,7 +498,7 @@ export default function Home() {
     }
 
     // Wait for all images to load
-    const images = [background, desk];
+    const images = [background, Downdesk, Updesk];
     let loadedImages = 0;
 
     images.forEach(img => {
