@@ -32,8 +32,18 @@ interface Character {
   sittingDeskIndex: number | null;
 }
 
+// Add interface for desk occupancy tracking
+interface DeskOccupancy {
+  up: boolean[];
+  down: boolean[];
+}
+
 export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const deskOccupancy = useRef<DeskOccupancy>({
+    up: [false, false, false],
+    down: [false, false, false]
+  });
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -288,6 +298,10 @@ export default function Home() {
       if (character.isSitting) {
         character.sittingTimer--;
         if (character.sittingTimer <= 0) {
+          // Mark desk as unoccupied when character leaves
+          if (character.sittingDesk !== null && character.sittingDeskIndex !== null) {
+            deskOccupancy.current[character.sittingDesk][character.sittingDeskIndex] = false;
+          }
           character.isSitting = false;
           character.sittingDesk = null;
           character.sittingDeskIndex = null;

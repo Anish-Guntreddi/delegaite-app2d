@@ -9,7 +9,10 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@supabase/auth-helpers-nextjs": "^0.10.0",
+    "@supabase/supabase-js": "^2.49.4",
     "@types/pixi.js": "^4.8.9",
+    "framer-motion": "^12.6.3",
     "next": "15.2.4",
     "pixi.js": "^8.9.1",
     "react": "^19.0.0",
