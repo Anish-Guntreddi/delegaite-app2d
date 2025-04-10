@@ -47,12 +47,24 @@ export default function Home() {
       { x: canvas.width * 0.975, y: canvas.height * 0.005, width: canvas.width * 0.022, height: canvas.height * 0.99 },
       { x: canvas.width * 0, y: canvas.height * 0.61, width: canvas.width * 0.255, height: canvas.height * 0.39 },
       { x: canvas.width * 0.235, y: canvas.height * 0.98, width: canvas.width * 0.78, height: canvas.height * 0.02 }
-      
     ];
 
     // Load background
     const background = new Image();
     background.src = "/OfficeSprites/Background/Office_Desig2.png";
+
+    // Load desk
+    const desk = new Image();
+    desk.src = "/OfficeSprites/Furniture/desk.png";
+
+    // Define desk positions and sizes
+    const desks = [
+      { x: canvas.width * 0.4, y: canvas.height * 0.3, width: canvas.width * 0.2, height: canvas.height * 0.2 },
+      { x: canvas.width * 0.2, y: canvas.height * 0.4, width: canvas.width * 0.2, height: canvas.height * 0.2 },
+      { x: canvas.width * 0.6, y: canvas.height * 0.4, width: canvas.width * 0.2, height: canvas.height * 0.2 },
+      { x: canvas.width * 0.3, y: canvas.height * 0.5, width: canvas.width * 0.2, height: canvas.height * 0.2 },
+      { x: canvas.width * 0.5, y: canvas.height * 0.5, width: canvas.width * 0.2, height: canvas.height * 0.2 }
+    ];
 
     // Load animations
     const loadFrames = (paths: string[]) => paths.map(src => {
@@ -323,6 +335,11 @@ export default function Home() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(background, 0, 0, canvas.width, canvas.height);
 
+      // Draw all desks
+      desks.forEach(deskPos => {
+        ctx.drawImage(desk, deskPos.x, deskPos.y, deskPos.width, deskPos.height);
+      });
+
       // Draw and outline collision areas
       ctx.strokeStyle = 'red';
       ctx.lineWidth = 4;
@@ -352,7 +369,7 @@ export default function Home() {
     }
 
     // Wait for all images to load
-    const images = [background];
+    const images = [background, desk];
     let loadedImages = 0;
 
     images.forEach(img => {
