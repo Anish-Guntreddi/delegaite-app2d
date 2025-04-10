@@ -47,6 +47,7 @@ export default function Home() {
       { x: canvas.width * 0.975, y: canvas.height * 0.005, width: canvas.width * 0.022, height: canvas.height * 0.99 },
       { x: canvas.width * 0, y: canvas.height * 0.61, width: canvas.width * 0.255, height: canvas.height * 0.39 },
       { x: canvas.width * 0.235, y: canvas.height * 0.98, width: canvas.width * 0.78, height: canvas.height * 0.02 }
+      
     ];
 
     // Load background
