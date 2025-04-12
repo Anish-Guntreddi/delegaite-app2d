@@ -2,6 +2,10 @@
 "use client";
 import { useEffect, useRef } from "react";
 
+// Define global constants for character dimensions
+const CHARACTER_WIDTH = 64;
+const CHARACTER_HEIGHT = 100;
+
 interface Character {
   x: number;
   y: number;
@@ -30,6 +34,7 @@ interface Character {
   sittingTimer: number;
   sittingDesk: "up" | "down" | null;
   sittingDeskIndex: number | null;
+  sittingCooldown: number;
 }
 
 // Add interface for desk occupancy tracking
@@ -89,6 +94,34 @@ export default function Home() {
       { x: canvas.width * 0.135 , y: canvas.height * 0.35, width: canvas.width * 0.23, height: canvas.height * 0.2 },
       { x: canvas.width * 0.45, y: canvas.height * 0.35, width: canvas.width * 0.22, height: canvas.height * 0.2 },
       { x: canvas.width * 0.75, y: canvas.height * 0.35, width: canvas.width * 0.22, height: canvas.height * 0.2 },
+    ];
+
+    // Define sitting trigger borders for each desk
+    const sittingTriggerBorders = {
+      down: downDesk.map(desk => ({
+        x: desk.x + 20, // Increased from 10 to 20
+        y: desk.y - 40, // Increased from -30 to -40
+        width: desk.width - 40, // Increased from -30 to -40
+        height: desk.height + 30, // Increased from +20 to +30
+        deskIndex: downDesk.indexOf(desk)
+      })),
+      up: upDesk.map(desk => ({
+        x: desk.x + 35, // Increased from 25 to 35
+        y: desk.y - 20, // Increased from -10 to -20
+        width: desk.width - 70, // Increased from -60 to -70
+        height: desk.height - 20, // Increased from -10 to -20
+        deskIndex: upDesk.indexOf(desk)
+      }))
+    };
+
+    // Add safe zones between desks
+    const deskSafeZones = [
+      // Safe zones between down desks
+      { x: downDesk[0].x + downDesk[0].width, y: 0, width: 50, height: canvas.height },
+      { x: downDesk[1].x + downDesk[1].width, y: 0, width: 50, height: canvas.height },
+      // Safe zones between up desks
+      { x: upDesk[0].x + upDesk[0].width, y: 0, width: 50, height: canvas.height },
+      { x: upDesk[1].x + upDesk[1].width, y: 0, width: 50, height: canvas.height }
     ];
 
     // Load animations
@@ -172,7 +205,9 @@ export default function Home() {
         },
         sittingFrames: {
           up: loadFrames([
-            `${basePath}/SittingChairUp/Character${characterNum}SittingChairUp.png`
+            `${basePath}/SittingChairUp/Character${characterNum}SittingChairUpFrame1.png`,
+            `${basePath}/SittingChairUp/Character${characterNum}SittingChairUpFrame2.png`,
+            
           ]),
           down: loadFrames([
             `${basePath}/SittingChairDown/Character${characterNum}SittingChairDownFrame1.png`,
@@ -185,14 +220,33 @@ export default function Home() {
     let frameCounter = 0;
     let currentFrame = 0;
 
-    function getValidSpawnPosition(): { x: number, y: number } {
+    function getValidSpawnPosition(currentCharacter: Character): { x: number, y: number } {
       if (!canvas) return { x: 0, y: 0 };
       
       const characterWidth = 64;
       const characterHeight = 100;
 
-      // Function to check if a position is valid (not in collision areas)
+      // Define directions array
+      const directions = [
+        { x: 1, y: 0 },   // right
+        { x: -1, y: 0 },  // left
+        { x: 0, y: 1 },   // down
+        { x: 0, y: -1 }   // up
+      ];
+
+      // Function to check if a position is valid
       const isValidPosition = (x: number, y: number) => {
+        // Check canvas bounds
+        if (
+          x < 0 || 
+          x > canvas.width - characterWidth ||
+          y < 0 || 
+          y > canvas.height - characterHeight
+        ) {
+          return false;
+        }
+        
+        // Check collision areas
         for (const area of collisionAreas) {
           if (
             x + characterWidth > area.x &&
@@ -203,42 +257,87 @@ export default function Home() {
             return false;
           }
         }
-        return true;
-      };
-
-      // Try to find a valid spawn position
-      let attempts = 0;
-      const maxAttempts = 100;
-      
-      while (attempts < maxAttempts) {
-        // Define safe spawn regions (areas where characters are likely to spawn)
-        const spawnRegions = [
-          { x: canvas.width * 0.1, y: canvas.height * 0.2, width: canvas.width * 0.8, height: canvas.height * 0.3 }, // Upper middle
-          { x: canvas.width * 0.1, y: canvas.height * 0.7, width: canvas.width * 0.8, height: canvas.height * 0.2 }  // Lower middle
-        ];
-
-        // Randomly select a spawn region
-        const region = spawnRegions[Math.floor(Math.random() * spawnRegions.length)];
         
-        // Generate random position within the selected region
-        const x = region.x + Math.random() * (region.width - characterWidth);
-        const y = region.y + Math.random() * (region.height - characterHeight);
+        // Check trigger boxes
+        for (const border of [...sittingTriggerBorders.down, ...sittingTriggerBorders.up]) {
+          if (
+            x >= border.x &&
+            x <= border.x + border.width &&
+            y >= border.y &&
+            y <= border.y + border.height
+          ) {
+            return false;
+          }
+        }
 
-        if (isValidPosition(x, y)) {
-          return { x, y };
+        // Check safe zones
+        for (const zone of deskSafeZones) {
+          if (
+            x + characterWidth > zone.x &&
+            x < zone.x + zone.width &&
+            y + characterHeight > zone.y &&
+            y < zone.y + zone.height
+          ) {
+            return true;
+          }
         }
         
-        attempts++;
+        return true;
+      };
+      
+      // Try each direction with increasing distance until we find a valid position
+      for (let distance = 150; distance <= 300; distance += 50) {
+        for (const dir of directions) {
+          const spawnX = currentCharacter.x + dir.x * distance;
+          const spawnY = currentCharacter.y + dir.y * distance;
+          
+          if (isValidPosition(spawnX, spawnY)) {
+            return { x: spawnX, y: spawnY };
+          }
+        }
       }
-
-      // If no valid position found after max attempts, return a default position
+      
+      // If no valid position found, try random positions in safe areas
+      const safeAreas = [
+        { x: 0, y: 0, width: canvas.width, height: canvas.height * 0.2 }, // Top area
+        { x: 0, y: canvas.height * 0.8, width: canvas.width, height: canvas.height * 0.2 }, // Bottom area
+        { x: 0, y: 0, width: canvas.width * 0.2, height: canvas.height }, // Left area
+        { x: canvas.width * 0.8, y: 0, width: canvas.width * 0.2, height: canvas.height } // Right area
+      ];
+      
+      for (const area of safeAreas) {
+        for (let attempts = 0; attempts < 10; attempts++) {
+          const spawnX = area.x + Math.random() * (area.width - characterWidth);
+          const spawnY = area.y + Math.random() * (area.height - characterHeight);
+          
+          if (isValidPosition(spawnX, spawnY)) {
+            return { x: spawnX, y: spawnY };
+          }
+        }
+      }
+      
+      // If still no valid position found, return a default position
       return { x: canvas.width * 0.5, y: canvas.height * 0.5 };
     }
 
     // Initialize characters with their animations
     const characters: Character[] = [
       {
-        ...getValidSpawnPosition(),
+        ...getValidSpawnPosition({
+          x: canvas.width * 0.5,
+          y: canvas.height * 0.5,
+          dx: 1,
+          dy: 0,
+          ...loadCharacterAnimations(1),
+          direction: "right",
+          idleTimer: 0,
+          isIdle: false,
+          isSitting: false,
+          sittingTimer: 0,
+          sittingDesk: null,
+          sittingDeskIndex: null,
+          sittingCooldown: 0
+        }),
         dx: 1,
         dy: 0,
         ...loadCharacterAnimations(1),
@@ -248,10 +347,25 @@ export default function Home() {
         isSitting: false,
         sittingTimer: 0,
         sittingDesk: null,
-        sittingDeskIndex: null
+        sittingDeskIndex: null,
+        sittingCooldown: 0
       },
       {
-        ...getValidSpawnPosition(),
+        ...getValidSpawnPosition({
+          x: canvas.width * 0.5,
+          y: canvas.height * 0.5,
+          dx: -1,
+          dy: 0,
+          ...loadCharacterAnimations(2),
+          direction: "left",
+          idleTimer: 0,
+          isIdle: false,
+          isSitting: false,
+          sittingTimer: 0,
+          sittingDesk: null,
+          sittingDeskIndex: null,
+          sittingCooldown: 0
+        }),
         dx: -1,
         dy: 0,
         ...loadCharacterAnimations(2),
@@ -261,10 +375,25 @@ export default function Home() {
         isSitting: false,
         sittingTimer: 0,
         sittingDesk: null,
-        sittingDeskIndex: null
+        sittingDeskIndex: null,
+        sittingCooldown: 0
       },
       {
-        ...getValidSpawnPosition(),
+        ...getValidSpawnPosition({
+          x: canvas.width * 0.5,
+          y: canvas.height * 0.5,
+          dx: 1,
+          dy: 0,
+          ...loadCharacterAnimations(3),
+          direction: "right",
+          idleTimer: 0,
+          isIdle: false,
+          isSitting: false,
+          sittingTimer: 0,
+          sittingDesk: null,
+          sittingDeskIndex: null,
+          sittingCooldown: 0
+        }),
         dx: 1,
         dy: 0,
         ...loadCharacterAnimations(3),
@@ -274,10 +403,25 @@ export default function Home() {
         isSitting: false,
         sittingTimer: 0,
         sittingDesk: null,
-        sittingDeskIndex: null
+        sittingDeskIndex: null,
+        sittingCooldown: 0
       },
       {
-        ...getValidSpawnPosition(),
+        ...getValidSpawnPosition({
+          x: canvas.width * 0.5,
+          y: canvas.height * 0.5,
+          dx: -1,
+          dy: 0,
+          ...loadCharacterAnimations(4),
+          direction: "left",
+          idleTimer: 0,
+          isIdle: false,
+          isSitting: false,
+          sittingTimer: 0,
+          sittingDesk: null,
+          sittingDeskIndex: null,
+          sittingCooldown: 0
+        }),
         dx: -1,
         dy: 0,
         ...loadCharacterAnimations(4),
@@ -287,7 +431,8 @@ export default function Home() {
         isSitting: false,
         sittingTimer: 0,
         sittingDesk: null,
-        sittingDeskIndex: null
+        sittingDeskIndex: null,
+        sittingCooldown: 0
       }
     ];
 
@@ -305,7 +450,14 @@ export default function Home() {
           character.isSitting = false;
           character.sittingDesk = null;
           character.sittingDeskIndex = null;
-          // Randomly choose a new direction
+          character.sittingCooldown = 200; // Set cooldown period
+          
+          // Find a valid spawn position outside trigger boxes
+          const newPos = getValidSpawnPosition(character);
+          character.x = newPos.x;
+          character.y = newPos.y;
+          
+          // Set movement direction based on spawn position
           const directions = ["up", "down", "left", "right"] as const;
           const newDirection = directions[Math.floor(Math.random() * directions.length)];
           character.direction = newDirection;
@@ -315,30 +467,46 @@ export default function Home() {
         return;
       }
 
+      // Decrease sitting cooldown if it's active
+      if (character.sittingCooldown > 0) {
+        character.sittingCooldown--;
+        return;
+      }
+
       // Check if character is near a desk
-      const characterWidth = 64;
-      const characterHeight = 100;
-      const deskProximity = 50; // Distance threshold to trigger sitting
+      const deskProximity = 50;
+      const deskCooldownDistance = 150; // Minimum distance required to sit again
 
       const checkDeskProximity = (desk: { x: number, y: number, width: number, height: number }, type: "up" | "down") => {
-        const deskCenterX = desk.x + desk.width / 2;
-        const deskCenterY = desk.y + desk.height / 2;
-        const characterCenterX = character.x + characterWidth / 2;
-        const characterCenterY = character.y + characterHeight / 2;
+        const characterCenterX = character.x + CHARACTER_WIDTH / 2;
+        const characterCenterY = character.y + CHARACTER_HEIGHT / 2;
         
-        const distance = Math.sqrt(
-          Math.pow(deskCenterX - characterCenterX, 2) + 
-          Math.pow(deskCenterY - characterCenterY, 2)
-        );
-
-        if (distance < deskProximity) {
-          character.isSitting = true;
-          character.sittingTimer = Math.floor(Math.random() * 100) + 50; // Sit for 50-150 frames
-          character.sittingDesk = type;
-          character.sittingDeskIndex = downDesk.findIndex(d => d.x === desk.x && d.y === desk.y);
-          character.dx = 0;
-          character.dy = 0;
-          return true;
+        // Find the corresponding trigger border
+        const borders = sittingTriggerBorders[type];
+        const border = borders.find(b => b.deskIndex === (type === "up" ? upDesk : downDesk).indexOf(desk));
+        
+        if (border) {
+          // Check if character center is within the trigger border
+          if (
+            characterCenterX >= border.x &&
+            characterCenterX <= border.x + border.width &&
+            characterCenterY >= border.y &&
+            characterCenterY <= border.y + border.height
+          ) {
+            // Check if desk is already occupied and character is not in cooldown
+            const deskIndex = border.deskIndex;
+            if (!deskOccupancy.current[type][deskIndex] && character.sittingCooldown === 0) {
+              character.isSitting = true;
+              character.sittingTimer = Math.floor(Math.random() * 100) + 50;
+              character.sittingDesk = type;
+              character.sittingDeskIndex = deskIndex;
+              character.dx = 0;
+              character.dy = 0;
+              // Mark desk as occupied
+              deskOccupancy.current[type][deskIndex] = true;
+              return true;
+            }
+          }
         }
         return false;
       };
@@ -379,9 +547,9 @@ export default function Home() {
       const checkCollision = (x: number, y: number) => {
         for (const area of collisionAreas) {
           if (
-            x + characterWidth > area.x &&
+            x + CHARACTER_WIDTH > area.x &&
             x < area.x + area.width &&
-            y + characterHeight > area.y &&
+            y + CHARACTER_HEIGHT > area.y &&
             y < area.y + area.height
           ) {
             return true;
@@ -417,8 +585,8 @@ export default function Home() {
         character.dx = -character.dx;
         character.direction = "right";
       }
-      if (character.x > canvas.width - characterWidth) {
-        character.x = canvas.width - characterWidth;
+      if (character.x > canvas.width - CHARACTER_WIDTH) {
+        character.x = canvas.width - CHARACTER_WIDTH;
         character.dx = -character.dx;
         character.direction = "left";
       }
@@ -427,8 +595,8 @@ export default function Home() {
         character.dy = -character.dy;
         character.direction = "down";
       }
-      if (character.y > canvas.height - characterHeight) {
-        character.y = canvas.height - characterHeight;
+      if (character.y > canvas.height - CHARACTER_HEIGHT) {
+        character.y = canvas.height - CHARACTER_HEIGHT;
         character.dy = -character.dy;
         character.direction = "up";
       }
@@ -438,6 +606,7 @@ export default function Home() {
       if (!canvas || !ctx) return;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(background, 0, 0, canvas.width, canvas.height);
+
 
       // Draw all desks that aren't being sat at
       downDesk.forEach((deskPos, index) => {
@@ -457,8 +626,6 @@ export default function Home() {
           ctx.drawImage(Updesk, deskPos.x, deskPos.y, deskPos.width, deskPos.height);
         }
       });
-
-  
 
       // Update and draw each character
       characters.forEach(character => {
@@ -483,11 +650,11 @@ export default function Home() {
           if (desk) {
             // Adjust dimensions for sitting animations
             if (character.sittingDesk === "up") {
-              width = 120;
-              height = 150;
+              width = 200;
+              height = 200;
             } else {
-              width = 100;
-              height = 120;
+              width = 200;
+              height = 200;
             }
             
             // Center the sitting character on the desk

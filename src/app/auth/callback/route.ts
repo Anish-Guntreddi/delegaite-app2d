@@ -6,43 +6,58 @@ export async function GET(request: Request) {
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get('code')
 
-  if (code) {
-    const supabase = createRouteHandlerClient({ cookies })
-    const { error } = await supabase.auth.exchangeCodeForSession(code)
-    
-    if (!error) {
-      // Get the user after successful authentication
-      const { data: { user } } = await supabase.auth.getUser()
-      
-      if (user) {
-        // Check if user exists in the users table
-        const { data: existingUser } = await supabase
-          .from('users')
-          .select('id')
-          .eq('id', user.id)
-          .single()
-
-        if (!existingUser) {
-          // Create new user record
-          const { error: insertError } = await supabase
-            .from('users')
-            .insert([
-              {
-                id: user.id,
-                email: user.email,
-                name: user.user_metadata?.full_name || null,
-                created_at: new Date().toISOString()
-              }
-            ])
-
-          if (insertError) {
-            console.error('Error creating user record:', insertError)
-          }
-        }
-      }
-    }
+  if (!code) {
+    return NextResponse.redirect(`${requestUrl.origin}/auth-error`)
   }
 
-  // URL to redirect to after sign in process completes
-  return NextResponse.redirect(requestUrl.origin)
+  try {
+    // Create a new Supabase client with the cookie store
+    const cookieStore = await cookies()
+    const supabase = createRouteHandlerClient({ cookies: () => cookieStore })
+
+    // Exchange the code for a session
+    const { error: authError } = await supabase.auth.exchangeCodeForSession(code)
+    if (authError) {
+      console.error('Auth error:', authError)
+      return NextResponse.redirect(`${requestUrl.origin}/auth-error`)
+    }
+
+    // Get the user after successful authentication
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+    if (userError || !user) {
+      console.error('User error:', userError)
+      return NextResponse.redirect(`${requestUrl.origin}/auth-error`)
+    }
+
+    // Check if user exists in the users table
+    const { data: existingUser, error: fetchError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('id', user.id)
+      .single()
+
+    if (fetchError && fetchError.code === 'PGRST116') {
+      // User doesn't exist, create a new record
+      const { error: insertError } = await supabase
+        .from('users')
+        .insert([
+          {
+            id: user.id,
+            email: user.email,
+            created_at: new Date().toISOString(),
+          }
+        ])
+
+      if (insertError) {
+        console.error('Error creating user record:', insertError)
+        return NextResponse.redirect(`${requestUrl.origin}/auth-error`)
+      }
+    }
+
+    // Successful authentication
+    return NextResponse.redirect(requestUrl.origin)
+  } catch (error) {
+    console.error('Auth callback error:', error)
+    return NextResponse.redirect(`${requestUrl.origin}/auth-error`)
+  }
 } 
